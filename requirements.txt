@@ -1,5 +1,5 @@
 python-telegram-bot==21.7
-yt-dlp==2024.10.22
+yt-dlp==2024.11.4
 aiohttp==3.11.10
 certifi==2024.8.30
 charset-normalizer==3.4.0
@@ -8,3 +8,6 @@ multidict==6.1.0
 propcache==0.2.0
 yarl==1.17.2
 ffmpeg-python==0.2.0
+brotli==1.1.0
+pycryptodomex==3.21.0
+websockets==13.1
