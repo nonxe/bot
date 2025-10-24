@@ -1,7 +1,9 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+import yt_dlp
 
 # Enable logging
 logging.basicConfig(
@@ -10,12 +12,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Quality settings
-QUALITY_SETTINGS = {
-    'low': {'video': '480p', 'audio': '128k'},
-    'medium': {'video': '720p', 'audio': '192k'},
-    'high': {'video': '1080p', 'audio': '320k'},
-    'ultra': {'video': '4K', 'audio': '320k'}
+# Quality settings for yt-dlp
+QUALITY_FORMATS = {
+    'low': 'worst[height<=480]',
+    'medium': 'best[height<=720]',
+    'high': 'best[height<=1080]',
+    'ultra': 'best'
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -23,12 +25,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     welcome_message = (
         f"👋 Welcome {user.mention_html()}!\n\n"
-        "🤖 I'm your Telegram Bot!\n\n"
+        "🤖 I'm your Video Downloader Bot!\n\n"
         "📋 Available Commands:\n"
         "/start - Start the bot\n"
         "/help - Get help\n"
         "/quality - Choose download quality\n\n"
-        "Send me a link to download!"
+        "📹 Send me a YouTube/video link to download!"
     )
     await update.message.reply_html(welcome_message)
 
@@ -37,12 +39,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = (
         "🆘 <b>How to use this bot:</b>\n\n"
         "1️⃣ Use /quality to select your preferred quality\n"
-        "2️⃣ Send me any media link\n"
-        "3️⃣ I'll process and send it to you\n\n"
-        "💡 <b>Supported formats:</b>\n"
-        "• Videos (YouTube, etc.)\n"
-        "• Audio files\n"
-        "• Multiple quality options\n\n"
+        "2️⃣ Send me a video link (YouTube, etc.)\n"
+        "3️⃣ I'll download and send it to you\n\n"
+        "💡 <b>Supported platforms:</b>\n"
+        "• YouTube\n"
+        "• Instagram\n"
+        "• Twitter/X\n"
+        "• Facebook\n"
+        "• And 1000+ more sites!\n\n"
         "⚙️ Current quality: <b>{}</b>"
     )
     current_quality = context.user_data.get('quality', 'medium')
@@ -57,7 +61,7 @@ async def quality_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ],
         [
             InlineKeyboardButton("📈 High (1080p)", callback_data='quality_high'),
-            InlineKeyboardButton("🎯 Ultra (4K)", callback_data='quality_ultra')
+            InlineKeyboardButton("🎯 Ultra (Best)", callback_data='quality_ultra')
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -77,40 +81,142 @@ async def quality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     quality = query.data.replace('quality_', '')
     context.user_data['quality'] = quality
     
-    settings = QUALITY_SETTINGS[quality]
+    quality_names = {
+        'low': '480p',
+        'medium': '720p',
+        'high': '1080p',
+        'ultra': 'Best Available'
+    }
+    
     await query.edit_message_text(
         text=f"✅ Quality set to: <b>{quality.upper()}</b>\n\n"
-             f"📹 Video: {settings['video']}\n"
-             f"🎵 Audio: {settings['audio']}\n\n"
-             f"Now send me a link to download!",
+             f"📹 Resolution: {quality_names[quality]}\n\n"
+             f"Now send me a video link to download!",
         parse_mode='HTML'
     )
 
+async def download_video(url: str, quality: str) -> dict:
+    """Download video using yt-dlp."""
+    format_string = QUALITY_FORMATS.get(quality, 'best[height<=720]')
+    
+    ydl_opts = {
+        'format': f'{format_string}/best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'nocheckcertificate': True,
+        'prefer_ffmpeg': True,
+        'merge_output_format': 'mp4',
+        'postprocessors': [{
+            'key': 'FFmpegVideoConvertor',
+            'preferedformat': 'mp4',
+        }],
+    }
+    
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            
+            # Handle extension conversion
+            if not filename.endswith('.mp4'):
+                filename = filename.rsplit('.', 1)[0] + '.mp4'
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'title': info.get('title', 'Video'),
+                'duration': info.get('duration', 0),
+                'thumbnail': info.get('thumbnail', None)
+            }
+    except Exception as e:
+        logger.error(f"Download error: {e}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle user messages (links)."""
+    """Handle user messages (video links)."""
     user_message = update.message.text
     quality = context.user_data.get('quality', 'medium')
     
-    if user_message.startswith('http://') or user_message.startswith('https://'):
-        await update.message.reply_text(
-            f"🔄 Processing your link...\n\n"
-            f"Quality: <b>{quality.upper()}</b>\n"
-            f"Link: <code>{user_message}</code>\n\n"
-            f"⏳ Please wait...",
-            parse_mode='HTML'
-        )
-        
-        # Here you would add your download logic
-        # For now, just confirming receipt
-        await update.message.reply_text(
-            "✅ Link received!\n\n"
-            "🚧 Download functionality ready to be implemented.\n"
-            "You can integrate yt-dlp or other downloaders here."
-        )
-    else:
+    if not (user_message.startswith('http://') or user_message.startswith('https://')):
         await update.message.reply_text(
             "❌ Please send a valid URL starting with http:// or https://\n\n"
             "Use /help for more information."
+        )
+        return
+    
+    # Send initial processing message
+    processing_msg = await update.message.reply_html(
+        f"🔄 <b>Processing your link...</b>\n\n"
+        f"Quality: <b>{quality.upper()}</b>\n"
+        f"Link: <code>{user_message}</code>\n\n"
+        f"⏳ Please wait, downloading..."
+    )
+    
+    try:
+        # Create downloads directory if it doesn't exist
+        os.makedirs('downloads', exist_ok=True)
+        
+        # Download the video
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: asyncio.run(download_video(user_message, quality))
+        )
+        
+        if not result['success']:
+            await processing_msg.edit_text(
+                f"❌ <b>Download failed!</b>\n\n"
+                f"Error: <code>{result['error']}</code>\n\n"
+                f"Please try:\n"
+                f"• Checking if the link is valid\n"
+                f"• Using a different quality setting\n"
+                f"• Trying another video",
+                parse_mode='HTML'
+            )
+            return
+        
+        # Update message
+        await processing_msg.edit_text(
+            f"📤 <b>Uploading video...</b>\n\n"
+            f"Title: <b>{result['title']}</b>\n"
+            f"Quality: <b>{quality.upper()}</b>",
+            parse_mode='HTML'
+        )
+        
+        # Send the video file
+        with open(result['filename'], 'rb') as video_file:
+            await update.message.reply_video(
+                video=video_file,
+                caption=f"🎬 <b>{result['title']}</b>\n\n"
+                        f"Quality: <b>{quality.upper()}</b>\n"
+                        f"Downloaded by @{context.bot.username}",
+                parse_mode='HTML',
+                supports_streaming=True,
+                read_timeout=300,
+                write_timeout=300
+            )
+        
+        # Delete processing message and file
+        await processing_msg.delete()
+        
+        # Clean up downloaded file
+        try:
+            os.remove(result['filename'])
+        except:
+            pass
+            
+        logger.info(f"Successfully sent video: {result['title']}")
+        
+    except Exception as e:
+        logger.error(f"Error handling message: {e}")
+        await processing_msg.edit_text(
+            f"❌ <b>An error occurred!</b>\n\n"
+            f"Error: <code>{str(e)}</code>\n\n"
+            f"Please try again or contact support.",
+            parse_mode='HTML'
         )
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
