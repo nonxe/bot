@@ -104,45 +104,29 @@ async def quality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 async def download_video(url: str, quality: str) -> dict:
-    """Download video using yt-dlp."""
+    """Download video using yt-dlp with YouTube-specific fixes."""
     format_string = QUALITY_FORMATS.get(quality, 'best[height<=720]')
     
     ydl_opts = {
         'format': f'{format_string}/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'quiet': True,
-        'no_warnings': True,
-        'extract_flat': False,
+        'quiet': False,
+        'no_warnings': False,
         'nocheckcertificate': True,
-        'prefer_ffmpeg': True,
-        'merge_output_format': 'mp4',
-        # Anti-bot bypass options
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'referer': 'https://www.google.com/',
+        'geo_bypass': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
-                'player_skip': ['webpage', 'configs'],
+                'player_client': ['android_creator', 'android_embedded', 'android_music', 'android_vr', 'ios', 'mweb'],
+                'skip': ['hls', 'dash'],
             }
         },
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-us,en;q=0.5',
-            'Accept-Encoding': 'gzip,deflate',
-            'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-            'Referer': 'https://www.google.com/',
+            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'X-YouTube-Client-Name': '14',
+            'X-YouTube-Client-Version': '19.09.37',
         },
-        'age_limit': None,
-        'geo_bypass': True,
-        'extractor_retries': 3,
-        'fragment_retries': 10,
-        'skip_unavailable_fragments': True,
-        'postprocessors': [{
-            'key': 'FFmpegVideoConvertor',
-            'preferedformat': 'mp4',
-        }],
     }
     
     try:
@@ -150,7 +134,6 @@ async def download_video(url: str, quality: str) -> dict:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
-            # Handle extension conversion
             if not filename.endswith('.mp4'):
                 filename = filename.rsplit('.', 1)[0] + '.mp4'
             
@@ -182,10 +165,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # Send initial processing message
     processing_msg = await update.message.reply_html(
-        f"🔄 <b>Processing your link...</b>\n\n"
-        f"Quality: <b>{quality.upper()}</b>\n"
-        f"Link: <code>{user_message}</code>\n\n"
-        f"⏳ Please wait, downloading..."
+        f"🔄 <b>Processing YouTube video...</b>\n\n"
+        f"Quality: <b>{quality.upper()}</b>\n\n"
+        f"⏳ Please wait 30-60 seconds..."
     )
     
     try:
@@ -200,57 +182,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not result['success']:
             error_msg = result['error'].lower()
             
-            # Check specific error types
-            if 'login' in error_msg or 'cookies' in error_msg or 'sign in' in error_msg:
+            if 'bot' in error_msg or 'sign in' in error_msg:
                 await processing_msg.edit_text(
-                    f"⚠️ <b>Authentication Required</b>\n\n"
-                    f"This video requires login/cookies.\n\n"
-                    f"<b>Solutions:</b>\n"
-                    f"1️⃣ Try a different video (most work without cookies)\n"
-                    f"2️⃣ Check if video is public\n"
-                    f"3️⃣ For Instagram: Use public posts only\n"
-                    f"4️⃣ For YouTube: Most videos work, try another\n\n"
-                    f"💡 <b>Working platforms without cookies:</b>\n"
-                    f"• Twitter/X ✅\n"
-                    f"• Facebook ✅\n"
-                    f"• TikTok ✅\n"
-                    f"• Reddit ✅\n"
-                    f"• Vimeo ✅\n"
-                    f"• And 900+ more sites!\n\n"
-                    f"<i>Error: {result['error'][:100]}...</i>",
-                    parse_mode='HTML'
-                )
-            elif 'rate' in error_msg or 'limit' in error_msg:
-                await processing_msg.edit_text(
-                    f"⏳ <b>Rate Limit Reached</b>\n\n"
-                    f"The platform has temporarily blocked requests.\n\n"
-                    f"<b>Please try:</b>\n"
-                    f"• Wait 5-10 minutes and try again\n"
-                    f"• Use a different platform\n"
-                    f"• Try another video\n\n"
-                    f"This is temporary! 😊",
-                    parse_mode='HTML'
-                )
-            elif 'not available' in error_msg or 'unavailable' in error_msg:
-                await processing_msg.edit_text(
-                    f"❌ <b>Video Not Available</b>\n\n"
-                    f"This video might be:\n"
-                    f"• Deleted or private\n"
-                    f"• Region-blocked\n"
-                    f"• Age-restricted\n"
-                    f"• Temporarily unavailable\n\n"
-                    f"Please try another video!",
+                    f"❌ <b>YouTube blocked this video</b>\n\n"
+                    f"Try another YouTube video.\n"
+                    f"Some videos work, some don't.\n\n"
+                    f"Error: <code>{result['error'][:200]}</code>",
                     parse_mode='HTML'
                 )
             else:
                 await processing_msg.edit_text(
-                    f"❌ <b>Download failed!</b>\n\n"
-                    f"<b>Try these platforms that work best:</b>\n"
-                    f"• Twitter/X ✅\n"
-                    f"• Facebook ✅\n"
-                    f"• TikTok ✅\n"
-                    f"• Reddit ✅\n\n"
-                    f"<i>Error: {result['error'][:150]}...</i>",
+                    f"❌ <b>Download failed</b>\n\n"
+                    f"Error: <code>{result['error'][:300]}</code>",
                     parse_mode='HTML'
                 )
             return
