@@ -39,15 +39,23 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = (
         "🆘 <b>How to use this bot:</b>\n\n"
         "1️⃣ Use /quality to select your preferred quality\n"
-        "2️⃣ Send me a video link (YouTube, etc.)\n"
+        "2️⃣ Send me a video link\n"
         "3️⃣ I'll download and send it to you\n\n"
-        "💡 <b>Supported platforms:</b>\n"
-        "• YouTube\n"
-        "• Instagram\n"
-        "• Twitter/X\n"
-        "• Facebook\n"
-        "• And 1000+ more sites!\n\n"
-        "⚙️ Current quality: <b>{}</b>"
+        "✅ <b>Best Working Platforms:</b>\n"
+        "• Twitter/X 🐦\n"
+        "• Facebook 📘\n"
+        "• TikTok 🎵\n"
+        "• Reddit 🤖\n"
+        "• Vimeo 🎬\n"
+        "• Dailymotion 📺\n"
+        "• Twitch Clips 🎮\n"
+        "• Streamable 📹\n"
+        "• And 900+ more!\n\n"
+        "⚠️ <b>May require login (limited):</b>\n"
+        "• YouTube (some videos)\n"
+        "• Instagram (some posts)\n\n"
+        "⚙️ Current quality: <b>{}</b>\n\n"
+        "💡 <i>Tip: Most platforms work perfectly!</i>"
     )
     current_quality = context.user_data.get('quality', 'medium')
     await update.message.reply_html(help_text.format(current_quality.upper()))
@@ -108,6 +116,29 @@ async def download_video(url: str, quality: str) -> dict:
         'nocheckcertificate': True,
         'prefer_ffmpeg': True,
         'merge_output_format': 'mp4',
+        # Anti-bot bypass options
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'referer': 'https://www.google.com/',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'player_skip': ['webpage', 'configs'],
+            }
+        },
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Accept-Encoding': 'gzip,deflate',
+            'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+            'Referer': 'https://www.google.com/',
+        },
+        'age_limit': None,
+        'geo_bypass': True,
+        'extractor_retries': 3,
+        'fragment_retries': 10,
+        'skip_unavailable_fragments': True,
         'postprocessors': [{
             'key': 'FFmpegVideoConvertor',
             'preferedformat': 'mp4',
@@ -167,15 +198,61 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         
         if not result['success']:
-            await processing_msg.edit_text(
-                f"❌ <b>Download failed!</b>\n\n"
-                f"Error: <code>{result['error']}</code>\n\n"
-                f"Please try:\n"
-                f"• Checking if the link is valid\n"
-                f"• Using a different quality setting\n"
-                f"• Trying another video",
-                parse_mode='HTML'
-            )
+            error_msg = result['error'].lower()
+            
+            # Check specific error types
+            if 'login' in error_msg or 'cookies' in error_msg or 'sign in' in error_msg:
+                await processing_msg.edit_text(
+                    f"⚠️ <b>Authentication Required</b>\n\n"
+                    f"This video requires login/cookies.\n\n"
+                    f"<b>Solutions:</b>\n"
+                    f"1️⃣ Try a different video (most work without cookies)\n"
+                    f"2️⃣ Check if video is public\n"
+                    f"3️⃣ For Instagram: Use public posts only\n"
+                    f"4️⃣ For YouTube: Most videos work, try another\n\n"
+                    f"💡 <b>Working platforms without cookies:</b>\n"
+                    f"• Twitter/X ✅\n"
+                    f"• Facebook ✅\n"
+                    f"• TikTok ✅\n"
+                    f"• Reddit ✅\n"
+                    f"• Vimeo ✅\n"
+                    f"• And 900+ more sites!\n\n"
+                    f"<i>Error: {result['error'][:100]}...</i>",
+                    parse_mode='HTML'
+                )
+            elif 'rate' in error_msg or 'limit' in error_msg:
+                await processing_msg.edit_text(
+                    f"⏳ <b>Rate Limit Reached</b>\n\n"
+                    f"The platform has temporarily blocked requests.\n\n"
+                    f"<b>Please try:</b>\n"
+                    f"• Wait 5-10 minutes and try again\n"
+                    f"• Use a different platform\n"
+                    f"• Try another video\n\n"
+                    f"This is temporary! 😊",
+                    parse_mode='HTML'
+                )
+            elif 'not available' in error_msg or 'unavailable' in error_msg:
+                await processing_msg.edit_text(
+                    f"❌ <b>Video Not Available</b>\n\n"
+                    f"This video might be:\n"
+                    f"• Deleted or private\n"
+                    f"• Region-blocked\n"
+                    f"• Age-restricted\n"
+                    f"• Temporarily unavailable\n\n"
+                    f"Please try another video!",
+                    parse_mode='HTML'
+                )
+            else:
+                await processing_msg.edit_text(
+                    f"❌ <b>Download failed!</b>\n\n"
+                    f"<b>Try these platforms that work best:</b>\n"
+                    f"• Twitter/X ✅\n"
+                    f"• Facebook ✅\n"
+                    f"• TikTok ✅\n"
+                    f"• Reddit ✅\n\n"
+                    f"<i>Error: {result['error'][:150]}...</i>",
+                    parse_mode='HTML'
+                )
             return
         
         # Update message
