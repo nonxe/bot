@@ -1,0 +1,31 @@
+{
+  "name": "Telegram Bot",
+  "description": "A powerful Telegram bot with quality selection features",
+  "repository": "https://github.com/nonxe/bot",
+  "logo": "https://telegram.org/img/t_logo.png",
+  "keywords": [
+    "telegram",
+    "bot",
+    "python",
+    "telegram-bot"
+  ],
+  "stack": "heroku-24",
+  "env": {
+    "TOKEN": {
+      "description": "Your Telegram Bot Token from @BotFather",
+      "required": true,
+      "value": ""
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}
